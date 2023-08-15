@@ -15,10 +15,10 @@ Unlike a miner, nodes must run 24 hours a day. Since the network is hardly used 
 ## Roadmap
 
 - [x] Peer-to-peer network prototype
-- [ ] Block validation function
-- [ ] Node runner rewards
-- [ ] Integration into testnet
-- [ ] Node consensus algorithm implementation
+- [] Block validation function
+- [] Node runner rewards
+- [] Integration into testnet
+- [] Node consensus algorithm implementation
 ## FAQ
 
 #### Question 1
