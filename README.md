@@ -1,7 +1,7 @@
-# <img src="https://coderscoin.github.io/assets/brand/icon.png" data-canonical-src="https://coderscoin.github.io/assets/brand/icon.png" width="35" height="35" /> CodersCoin Miner
-This is the official mining software for CSC cryptocurrency. CodersCoin uses the Proof of Work consensus algorithm to validate blocks, but due to the lightweight nature of the blockchain, hashing and the proof of work process do not require too much computing capacity unlike other cryptocurrencies. 
+# <img src="https://coderscoin.github.io/assets/brand/icon.png" data-canonical-src="https://coderscoin.github.io/assets/brand/icon.png" width="35" height="35" /> CodersCoin Node
+This is the official node software for CSC cryptocurrency. CodersCoin currently operates centrally, but the project will soon reach the decentralized phase.
 
-[![Available](https://img.shields.io/badge/Available-Mainnet-green)](https://choosealicense.com/licenses/mit/)
+[![Available](https://img.shields.io/badge/Available-PTP%20Testnet-green)](https://choosealicense.com/licenses/mit/)
 [![Release](https://img.shields.io/badge/Release-Executable-green)](https://opensource.org/licenses/)
 ## Important!
 Since there are still few transactions on the network, at first it is enough to run the mining script once a day. If no new transaction takes place, the miner script wants to mine the last (in this case already mined) transaction or the miner reward block, which the network will block (error code 403).
