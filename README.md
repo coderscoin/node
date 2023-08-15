@@ -4,21 +4,21 @@ This is the official node software for CSC cryptocurrency. CodersCoin currently 
 [![Available](https://img.shields.io/badge/Available-PTP%20Testnet-red)](https://choosealicense.com/licenses/mit/)
 [![Release](https://img.shields.io/badge/Release-Script-red)](https://opensource.org/licenses/)
 ## Important!
-Since there are still few transactions on the network, at first it is enough to run the mining script once a day. If no new transaction takes place, the miner script wants to mine the last (in this case already mined) transaction or the miner reward block, which the network will block (error code 403).
+Unlike a miner, nodes must run 24 hours a day. Since the network is hardly used at the moment, 100% uptime is not required. You will have to apply if you want to run a node!
 ## Screenshots
 
 ![App Screenshot](https://via.placeholder.com/468x300?text=App+Screenshot+Here)
 ## Features
 
-- Standalone executable file
-- Platform-independence
+- Peer-to-peer decentralized protocol
+- 
 ## Roadmap
 
-- [x] Miner script version
-- [x] Testnet testing
-- [x] Mainnet update
-- [x] Bundled executable file
-- [x] Public release
+- [x] Peer-to-peer network prototype
+- [ ] Block validation function
+- [ ] Node runner rewards
+- [ ] Integration into testnet
+- [ ] Node consensus algorithm implementation
 ## FAQ
 
 #### Question 1
