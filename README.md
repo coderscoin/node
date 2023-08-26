@@ -15,10 +15,10 @@ Unlike a miner, nodes must run 24 hours a day. Since the network is hardly used 
 ## Roadmap
 
 - [x] Peer-to-peer network prototype
-- [] Block validation function
-- [] Node runner rewards
+- [x] Block validation function
+- [x] Node runner rewards
 - [] Integration into testnet
-- [] Node consensus algorithm implementation
+- [x] Node consensus algorithm implementation
 ## FAQ
 
 #### Question 1
@@ -33,7 +33,7 @@ Answer 2
 ### Get the latest block
 
 ```https
-  GET /api/get/latestblock
+  METHOD getBalance
 ```
 This returns the latest block on the chain in JSON format.
 #### Example Response
