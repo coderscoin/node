@@ -1,0 +1,9 @@
+{
+    "nodeVersion": "v1.0.0",
+    "nodeExplorer":"",
+    "runnerUser": "petertill",
+    "serverIP":"172.900.0.1",
+    "serverPort":"3000",
+    "blockchainFile":"blockchain1.json",
+    "transactionPoolFile":"transactions.json"
+}
