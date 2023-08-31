@@ -4,7 +4,6 @@ const crypto = require('crypto');
 const axios = require('axios');
 
 const config = require('./config.json');
-const { get } = require('http');
 
 
 // BLOCKCHAIN CLASSES
@@ -84,7 +83,7 @@ class Blockchain {
 
 	async addBlock(newBlock, proof, miner = null, mined = true) {
 		const previousHash = this.getLatestBlock().computeHash();
-		console.log("Checking block validity...");
+		console.log(" OPERATION ","Checking block validity...");
 		console.log("Hash by this node: ", previousHash);
 		console.log("Hash according to the miner: ", newBlock.previousHash);
 		//Check if the block is valid
@@ -114,12 +113,13 @@ class Blockchain {
 		}
     
 		this.chain.push(newBlock);
-		console.log("Valid block from peer! Adding to chain...");
 
 		this.writeChain(this.chain);
 		if (mined){//Only spread the block if it is from miner
-			console.log("Valid block from miner! Broadcasting to other peers...", {newBlock:newBlock.toJSON(), proof:proof});
+			console.log("\x1b[94m YOU \x1b[0m","The block from miner is valid. Broadcasting to other peers...");
     		broadcastData("spreadBlock", {newBlock:newBlock.toJSON(), proof:proof});
+		}else {
+			console.log(" OPERATION ","The block from peer is valid. Saving...");
 		}
 
 		return true;
@@ -140,7 +140,7 @@ class Blockchain {
 	}
 	//Check the received transaction and broadcast to other peers and miners
 	async addTransaction(transaction, data = [{}]) {
-		console.log("Checking transaction validity...");
+		console.log(" OPERATION ","Checking transaction validity...");
 
 		const { fromAddress, toAddress, amount, tks } = transaction;
 		if (await this.getBalance(fromAddress) < amount + amount * 0.15) {
@@ -150,7 +150,7 @@ class Blockchain {
 		}else if (toAddress <= "" || toAddress == fromAddress || toAddress == config.runnerUser) {
 			return { status: false, message: 'Self spending' };
 		}
-		console.log("Valid transaction from wallet! Adding to unconfirmed pool...");
+		console.log(" OPERATION ","Valid transaction from wallet! Adding to unconfirmed pool...");
 		saveTransaction([this.chain.length + 1, [transaction], Date.now(), data, config.runnerUser]);
 
 		return { status: true, message: 'Transaction added successfully' };
@@ -177,11 +177,8 @@ class Blockchain {
 
 
 
-let blockchain = [];
+//let blockchain = [];
 
-const peers = [
-    { host: 'localhost', port: 3001 }
-];
 (async function() {
 	try {
 		const Coin = await Blockchain.create(true);
@@ -197,15 +194,8 @@ async function getRandomPeer() {
 	const filteredData = peers.filter(entry => entry.user !== config.runnerUser);
 	
     const randomIndex = Math.floor(Math.random() * filteredData.length);
-    console.log("\x1b[93m Getting the list of nodes... \x1b[0m");
+    console.log("\x1b[94m YOU \x1b[0m","Getting the list of nodes...");
     return filteredData[randomIndex];
-}
-
-async function getPeers() {
-	let res = await axios.get("https://raw.githubusercontent.com/coderscoin/nodexplorer/main/peers.json");
-	let peers = res.data;
-	const filteredData = peers.filter(entry => entry.user !== config.runnerUser);
-	return filteredData;
 }
 
 // CHAIN FUNCTIONS
@@ -257,7 +247,7 @@ function shiftTransaction(){
   	transaction.shift();
   	fs.writeFileSync(config.transactionPoolFile, JSON.stringify(transaction));
 }
-
+// peer data: green (92), outside data: magenta (95), external request from us: blue (94), wallet: yellow (93), error: red (91)
 //LISTENING SERVER
 const server = net.createServer(socket => {
 	console.log('Node connected:', socket.remoteAddress + ':' + socket.remotePort);
@@ -268,11 +258,11 @@ const server = net.createServer(socket => {
 
 		//Peer requests
 		if (receivedData.type === 'requestBlockchain') {
-			console.log('Received blockchain request from an other peer');
+			console.log("\x1b[92m PEER \x1b[0m",'Requested blockchain');
 			const responseData = { type: 'sendBlockchain', blockchain:getChain() };
 			socket.write(JSON.stringify(responseData));
 		}else if(receivedData.type === 'spreadBlock'){
-			console.log("Received new block from peer");
+			console.log("\x1b[92m PEER \x1b[0m","Sent new block");
 			const newBlock = receivedData.data.newBlock;
 			const proof = receivedData.data.proof;
 			const miner = receivedData.data.miner;
@@ -284,7 +274,7 @@ const server = net.createServer(socket => {
 			await Coin.addBlock(block, proof, miner, false);
 		}//Miner requests
 		else if (receivedData.type === 'mineRequest'){
-			console.log("Received mine request from miner");
+			console.log("\x1b[95m MINER \x1b[0m","Requested transaction");
 			const Coin = await Blockchain.create(false);
 			let latestJSON = await Coin.getLatestBlock();
 			const responseData = { type: 'mineResponse', transaction:loadTransaction(), latestBlock: latestJSON};
@@ -292,30 +282,31 @@ const server = net.createServer(socket => {
 			socket.write(JSON.stringify(responseData));
 		}
 		else if (receivedData.type === 'newBlock'){
-			console.log("Got this shit: ",receivedData.blocks.newBlock);
-			let latestBlock = receivedData.blocks.latestblock;
+			console.log("\x1b[95m MINER \x1b[0m","Sent new block");
 			let newBlock = receivedData.blocks.newblock;
 			let proof = receivedData.blocks.proof;
 			let miner = receivedData.blocks.miner;
-			console.log(receivedData);
+
 			let block = Block.fromJSON(newBlock);
 			const Coin = await Blockchain.create(false);
-			console.log("Received new block from miner: ", Block.fromJSON(newBlock));
+			/*console.log("Received new block from miner: ", Block.fromJSON(newBlock));
 			console.log("Node:", Coin.proofOfWork(block));
-			console.log("Miner:", proof);
+			console.log("Miner:", proof);*/
 
-			let check = await Coin.addBlock(block, proof, miner);
+			await Coin.addBlock(block, proof, miner);
 		}//Wallet requests
 		else if (receivedData.type === 'newTransaction'){
+			console.log("\x1b[93m WALLET \x1b[0m","Sent new transaction");
 			let transaction = receivedData.transaction;
 			let data = receivedData.data;
+
 			const Coin = await Blockchain.create(false);
-			console.log("Transaction and data received from wallet: ", transaction, data);
+
 			let check = await Coin.addTransaction({fromAddress: transaction.from, toAddress: transaction.to, amount: transaction.amount, tsk: transaction.tsk}, data);
 			//ToDo: Add callback to wallet
 		}
 		else if (receivedData.type === 'getBalance'){
-			console.log("Received balance request from wallet: ", receivedData.data);
+			console.log("\x1b[93m WALLET \x1b[0m","Requested balance");
 			const Coin = await Blockchain.create(false);
 			let balance = await Coin.getBalance(receivedData.data);//Holds an address
 			socket.write(JSON.stringify({type: 'dataResponse', data: balance}));
@@ -323,16 +314,16 @@ const server = net.createServer(socket => {
 	});
 
 	socket.on('error', error => {
-		console.error('Socket error:', error);
+		console.error("\x1b[91m ERROR \x1b[0m",'Socket error:', error);
 	});
 
 	socket.on('end', () => {
-		console.log('Node disconnected:', socket.remoteAddress + ':' + socket.remotePort);
+		console.log("\x1b[91m DISCONNECT \x1b[0m",'Node disconnected:', socket.remoteAddress + ':' + socket.remotePort);
 	});
 });
 //REQUESTS
 async function requestBlockchainFromPeer(peer) {
-  	console.log("Requesting blockchain from peer");
+  	console.log("\x1b[94m YOU \x1b[0m","Requesting blockchain from peer...");
 	const client = net.connect(peer.port, peer.host, () => {
 		console.log('Connected to peer:', peer.host + ':' + peer.port);
 		const requestData = { type: 'requestBlockchain' };
@@ -341,31 +332,33 @@ async function requestBlockchainFromPeer(peer) {
     client.on('data', data => {
         const receivedData = JSON.parse(data.toString());
         if (receivedData.type === 'sendBlockchain') {
-        fs.writeFileSync(config.blockchainFile, JSON.stringify(receivedData.blockchain));
-          console.log('Received blockchain from peer:', receivedData.blockchain);
-          // Handle received blockchain, e.g., replace current blockchain with received one
-          blockchain = receivedData.blockchain;
-		  //return blockchain;
+			console.log("\x1b[92m PEER \x1b[0m","Sent blockchain");
+			blockchain = receivedData.blockchain;
+        	
+			fs.writeFileSync(config.blockchainFile, JSON.stringify(receivedData.blockchain));
+
 		  stored = getChain();
 		  if (blockchain.length > stored.length){
-			console.log("Overwriting local chain...");
+			console.log(" OPERATION ","Overwriting local chain...");
 			return blockchain;
 		  }
 		  
-		  console.log("Using local chain...");
+		  console.log(" OPERATION ","Using local chain...");
           return stored;
         }
         client.end();
       });
 	  client.on('error', error => {
-		console.error(`Error connecting to ${peer.host}:${peer.port}: ${error.message}`);
+		console.error("\x1b[91m ERROR \x1b[0m",`Error connecting to ${peer.host}:${peer.port}: ${error.message}`);
 		// Implement retry logic, e.g., using setTimeout
-		setTimeout(() => requestBlockchainFromPeer(getRandomPeer()), 5000); // Retry after 5 seconds
+		//setTimeout(() => requestBlockchainFromPeer(getRandomPeer()), 5000); // Retry after 5 seconds
+		return getChain();
 	  });
 	
 }
 
-function broadcastData(type, data) {
+async function broadcastData(type, data) {
+	peers = await getRandomPeer();
 	peers.forEach(peer => {
 		const client = net.connect(peer.port, peer.host, () => {
 			console.log('Connected to peer:', peer.host + ':' + peer.port);
@@ -373,7 +366,7 @@ function broadcastData(type, data) {
 			//client.end();
 		});
 		client.on('error', err => {
-			console.log(`Error connecting to ${peer.host}:${peer.port}: ${err.message}`);
+			console.log("\x1b[91m ERROR \x1b[0m",`Error connecting to ${peer.host}:${peer.port}: ${err.message}`);
 			// Implement retry logic here
 		});
     });
@@ -382,5 +375,5 @@ function broadcastData(type, data) {
 
 const PORT = config.serverPort;
 server.listen(PORT, () => {
-	console.log(`Node is running on port ${PORT}`);
+	console.log(" OPERATION ",`Node is running on port ${PORT}`);
 });
