@@ -198,6 +198,15 @@ async function getRandomPeer() {
     return filteredData[randomIndex];
 }
 
+async function getPeers() {
+    let res = await axios.get("https://raw.githubusercontent.com/coderscoin/nodexplorer/main/peers.json");
+    let peers = res.data;
+	const filteredData = peers.filter(entry => entry.user !== config.runnerUser);
+	
+    console.log("\x1b[94m YOU \x1b[0m","Getting the list of nodes...");
+    return filteredData;
+}
+
 // CHAIN FUNCTIONS
 function getChain() {
     let blockchain = fs.readFileSync(config.blockchainFile);
@@ -358,7 +367,7 @@ async function requestBlockchainFromPeer(peer) {
 }
 
 async function broadcastData(type, data) {
-	peers = await getRandomPeer();
+	peers = await getPeers();
 	peers.forEach(peer => {
 		const client = net.connect(peer.port, peer.host, () => {
 			console.log('Connected to peer:', peer.host + ':' + peer.port);
