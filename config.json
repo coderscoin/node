@@ -2,8 +2,9 @@
     "nodeVersion": "v1.0.0",
     "nodeExplorer":"",
     "runnerUser": "petertill",
-    "serverIP":"172.900.0.1",
+    "serverIP":"localhost",
     "serverPort":"3000",
     "blockchainFile":"blockchain1.json",
-    "transactionPoolFile":"transactions.json"
+    "transactionPoolFile":"transactions.json",
+    "seedPeer": {"host": "localhost", "port": 3001}
 }

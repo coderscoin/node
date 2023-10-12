@@ -1,20 +1,21 @@
 const net = require('net');
 const fs = require('fs');
 const crypto = require('crypto');
-const axios = require('axios');
+const elliptic = require('elliptic');
 
 const config = require('./config.json');
 
 
 // BLOCKCHAIN CLASSES
 class Block {
-	constructor(index, transactions,  timestamp, previousHash, nonce = 0, data = [{}]) {
+	constructor(index, transactions,  timestamp, previousHash, nonce = 0, data = {}, publicKey = "") {
 		this.index = index;
 		this.transactions = transactions;
 		this.data = data;
 		this.timestamp = timestamp;
 		this.previousHash = previousHash;
 		this.nonce = nonce;
+		this.publicKey = publicKey;
 	}
 
 	computeHash() {
@@ -29,13 +30,14 @@ class Block {
 			timestamp: this.timestamp,
 			previousHash: this.previousHash,
 			nonce: this.nonce,
-			data: this.data
+			data: this.data,
+			publicKey: this.publicKey
 		};
 	}
 
 	static fromJSON(json) {
-		const { index, transactions, timestamp, previousHash, nonce, data } = json;
-		return new Block(index, transactions, timestamp, previousHash, nonce, data);
+		const { index, transactions, timestamp, previousHash, nonce, data, publicKey } = json;
+		return new Block(index, transactions, timestamp, previousHash, nonce, data, publicKey);
 	}
 }
 class Blockchain {
@@ -73,7 +75,8 @@ class Blockchain {
 			latestBlockData.timestamp,
 			latestBlockData.previousHash,
 			latestBlockData.nonce,
-			latestBlockData.data
+			latestBlockData.data,
+			latestBlockData.publicKey
 		);
 	}
   
@@ -86,6 +89,7 @@ class Blockchain {
 		console.log(" OPERATION ","Checking block validity...");
 		console.log("Hash by this node: ", previousHash);
 		console.log("Hash according to the miner: ", newBlock.previousHash);
+		const { signature, ...tx } = newBlock.transactions[0];
 		//Check if the block is valid
 		if (previousHash !== newBlock.previousHash) {//Check if the previous hash is correct
 			console.log("Not valid hash");
@@ -95,7 +99,7 @@ class Blockchain {
 			console.log("Not valid proof");
 			return false;
 		}//Check if the main transaction is tampered using TSK (Transaction Signature Key)
-		else if(await validateTSK(newBlock.transactions[0].tsk, newBlock.transactions[0].fromAddress, newBlock.transactions[0].toAddress, newBlock.transactions[0].amount)){
+		else if(verifyTransaction({from:tx.fromAddress, to:tx.toAddress, amount:tx.amount, data:tx.data}, newBlock.publicKey ,newBlock.transactions[0].signature) == false){
 			console.log("Block is tampered");
 			return false;
 		}//Check if someone is trying to steal gas
@@ -139,19 +143,29 @@ class Blockchain {
 		return computedHash;
 	}
 	//Check the received transaction and broadcast to other peers and miners
-	async addTransaction(transaction, data = [{}]) {
+	async addTransaction(transaction, blockdata = {}, publicKey) {
 		console.log(" OPERATION ","Checking transaction validity...");
 
-		const { fromAddress, toAddress, amount, tks } = transaction;
-		if (await this.getBalance(fromAddress) < amount + amount * 0.15) {
+		const { fromAddress, toAddress, amount, signature, data } = transaction;
+		if (await this.getBalance(fromAddress) < amount + amount * 0.1) {
 			return { status: false, message: 'Insufficient balance or gas' };
-		}else if (amount <= 0) {
+		}/*else if (amount <= 0) {
 			return { status: false, message: 'Insufficient amount' };
-		}else if (toAddress <= "" || toAddress == fromAddress || toAddress == config.runnerUser) {
+		}*/else if (toAddress <= "" || toAddress == fromAddress || toAddress == config.runnerUser) {
 			return { status: false, message: 'Self spending' };
 		}
 		console.log(" OPERATION ","Valid transaction from wallet! Adding to unconfirmed pool...");
-		saveTransaction([this.chain.length + 1, [transaction], Date.now(), data, config.runnerUser]);
+		/*
+		latestBlockData.index,
+			latestBlockData.transactions,
+			latestBlockData.timestamp,
+			latestBlockData.previousHash,
+			latestBlockData.nonce,
+			latestBlockData.data,
+			latestBlockData.publicKey
+		*/
+
+		saveTransaction({transaction:transaction, data:blockdata, node:config.runnerUser, publicKey:publicKey});
 
 		return { status: true, message: 'Transaction added successfully' };
 	}
@@ -169,6 +183,21 @@ class Blockchain {
 		}
 		return balance;
 	}
+
+	async getUserNFTs(userAddress) {
+		const userNFTs = [];
+	  
+		for (const block of this.chain) {
+		  for (const transaction of block.transactions) {
+			// Check if 'data' property exists and has 'NFT' property
+			if (transaction.toAddress === userAddress && transaction.data && transaction.data.NFT) {
+			  userNFTs.push(transaction.data.NFT);
+			}
+		  }
+		}
+	  
+		return userNFTs;
+	  }
   async getBlockchain() {
     console.log(this.chain);
     return this.chain.map(block => ({ ...block, transactions: [...block.transactions] }));
@@ -176,35 +205,83 @@ class Blockchain {
 }
 
 
-
+const PEERLIST = [
+	config.seedPeer
+];
 //let blockchain = [];
 
 (async function() {
 	try {
 		const Coin = await Blockchain.create(true);
+		await peerDiscovery();
 	} catch (err) {
 		console.log("Cannot connect to peers: ", err.message);
 	}
 })();
 
 // PEER DISCOVERY FUNCTIONS
+
+async function peerDiscovery() {
+	const randomPeer = await getRandomPeer();
+
+	console.log(randomPeer);
+
+	if (randomPeer) {
+		const { host, port } = randomPeer;
+		const client = net.connect(port, host, () => {
+			client.write(JSON.stringify({
+				type: 'getPeers', 
+				requester: {
+					host: config.serverIP, // Your own host
+					port: config.serverPort, // Your own port
+			  	}
+			}));
+		});
+
+		client.on('data', (data) => {
+			const receivedData = JSON.parse(data);
+			if (receivedData.type === 'sendPeers') {
+			  // Update your list of known peers with the information received
+			  const newPeers = receivedData.peers;
+			  newPeers.forEach((peer) => {
+				if (!PEERLIST.some((knownPeer) => knownPeer.host === peer.host && knownPeer.port === peer.port)) {
+					if (peer.host != config.serverIP && peer.port != config.serverPort && peer.host != "wallet"){
+						PEERLIST.push(peer);
+					}
+				}
+			  });
+			  console.log('Updated the list of known peers!');
+	  
+			  // Attempt to connect to the newly discovered peers
+			  
+			}
+			client.end();
+		  });
+	  
+		  client.on('error', (error) => {
+			console.error('Error during peer discovery: Could not connect to seed peer');
+		  });
+	}
+}
+
+function removePeer(peerSocket) {
+	const peerIndex = connectedPeers.indexOf(peerSocket);
+	if (peerIndex !== -1) {
+		connectedPeers.splice(peerIndex, 1);
+	}
+}
+
 async function getRandomPeer() {
-    let res = await axios.get("https://raw.githubusercontent.com/coderscoin/nodexplorer/main/peers.json");
+    /*let res = await axios.get("https://raw.githubusercontent.com/coderscoin/nodexplorer/main/peers.json");
     let peers = res.data;
 	const filteredData = peers.filter(entry => entry.user !== config.runnerUser);
 	
     const randomIndex = Math.floor(Math.random() * filteredData.length);
     console.log("\x1b[94m YOU \x1b[0m","Getting the list of nodes...");
-    return filteredData[randomIndex];
-}
+    return filteredData[randomIndex];*/
+	const randomIndex = Math.floor(Math.random() * PEERLIST.length);
 
-async function getPeers() {
-    let res = await axios.get("https://raw.githubusercontent.com/coderscoin/nodexplorer/main/peers.json");
-    let peers = res.data;
-	const filteredData = peers.filter(entry => entry.user !== config.runnerUser);
-	
-    console.log("\x1b[94m YOU \x1b[0m","Getting the list of nodes...");
-    return filteredData;
+	return PEERLIST[randomIndex];
 }
 
 // CHAIN FUNCTIONS
@@ -214,27 +291,17 @@ function getChain() {
 }
 
 // EXTERNAL VALIDATION FUNCTIONS
-async function validateTSK(tsk, sender, receiver, amount) {
-	let data = {
-		"tsk":tsk,
-		"sender":sender,
-		"receiver":receiver,
-		"amount":amount
-	};
-	const res = await axios.post('https://cscvalidation.tillpetya20.repl.co/check', 
-	data,
-	  {
-		headers: {
-		  // Overwrite Axios's automatically set Content-Type
-		  'Content-Type': 'application/json'
-		}
-	  });
-	if (res.status == 200){
-		return false;
-	}else{
-		return true;
-	}
-}
+function verifyTransaction(transaction, publicKey, signature) {
+	console.log(transaction, publicKey, signature);
+	console.log(typeof transaction, typeof publicKey, typeof signature);
+	const dataToVerify = JSON.stringify(transaction);
+  
+	// Create an ECDSA instance using the secp256k1 curve (same as used for signing)
+	const ec = new elliptic.ec('secp256k1');
+  
+	// Verify the signature using the public key
+	return ec.verify(dataToVerify, signature, publicKey, 'hex');
+  }
 
 //TRANSACTION POOL FUNCTIONS
 //Save unconfirmed transactions to local pool
@@ -256,6 +323,7 @@ function shiftTransaction(){
   	transaction.shift();
   	fs.writeFileSync(config.transactionPoolFile, JSON.stringify(transaction));
 }
+
 // peer data: green (92), outside data: magenta (95), external request from us: blue (94), wallet: yellow (93), error: red (91)
 //LISTENING SERVER
 const server = net.createServer(socket => {
@@ -281,6 +349,18 @@ const server = net.createServer(socket => {
 			const Coin = await Blockchain.create(false);
 
 			await Coin.addBlock(block, proof, miner, false);
+		}else if(receivedData.type === 'getPeers'){
+			console.log("\x1b[92m PEER \x1b[0m","Requested peers");
+			const responseData = { type: 'sendPeers', peers:PEERLIST };
+
+			const requester = receivedData.requester;
+			if (!PEERLIST.some((request) => request.host === requester.host && request.port === requester.port)) {
+				if (requester.host != config.serverIP && requester.port != config.serverPort && requester.host != "wallet"){
+					PEERLIST.push(requester);
+				}
+			}
+
+			socket.write(JSON.stringify(responseData));
 		}//Miner requests
 		else if (receivedData.type === 'mineRequest'){
 			console.log("\x1b[95m MINER \x1b[0m","Requested transaction");
@@ -296,6 +376,8 @@ const server = net.createServer(socket => {
 			let proof = receivedData.blocks.proof;
 			let miner = receivedData.blocks.miner;
 
+			console.log("New block: ", newBlock);
+
 			let block = Block.fromJSON(newBlock);
 			const Coin = await Blockchain.create(false);
 			/*console.log("Received new block from miner: ", Block.fromJSON(newBlock));
@@ -308,10 +390,12 @@ const server = net.createServer(socket => {
 			console.log("\x1b[93m WALLET \x1b[0m","Sent new transaction");
 			let transaction = receivedData.transaction;
 			let data = receivedData.data;
+			let publicKey = receivedData.publicKey;
+			console.log("Transaction: ", transaction);
 
 			const Coin = await Blockchain.create(false);
 
-			let check = await Coin.addTransaction({fromAddress: transaction.from, toAddress: transaction.to, amount: transaction.amount, tsk: transaction.tsk}, data);
+			let check = await Coin.addTransaction({fromAddress: transaction.from, toAddress: transaction.to, amount: transaction.amount, signature: transaction.signature, data: transaction.data}, data, publicKey);
 			//ToDo: Add callback to wallet
 		}
 		else if (receivedData.type === 'getBalance'){
@@ -319,6 +403,12 @@ const server = net.createServer(socket => {
 			const Coin = await Blockchain.create(false);
 			let balance = await Coin.getBalance(receivedData.data);//Holds an address
 			socket.write(JSON.stringify({type: 'dataResponse', data: balance}));
+		}
+		else if (receivedData.type === 'getNFTs'){
+			const Coin = await Blockchain.create(false);
+			const NFTS = await Coin.getUserNFTs("csc.a061d662f580ff4de43b49fa82d80a4b80f8434a");
+			console.log("User NFT test: ", NFTS);
+			socket.write(JSON.stringify({type: 'dataResponse', data: NFTS}));
 		}
 	});
 
@@ -367,7 +457,7 @@ async function requestBlockchainFromPeer(peer) {
 }
 
 async function broadcastData(type, data) {
-	peers = await getPeers();
+	peers = PEERLIST;
 	peers.forEach(peer => {
 		const client = net.connect(peer.port, peer.host, () => {
 			console.log('Connected to peer:', peer.host + ':' + peer.port);
